@@ -20,15 +20,14 @@ var $Defers: [int][Event]bool;
 // Types
 type Machine;
 type State;
-type Event = int;
+type Event;
 type Payload = int;
 
-const unique $HALT: Event;
 const unique $DEFAULT: Event;
+const unique $HALT: Event;
 
 const unique $NULL: int;
 axiom $NULL == 0;
-
 
 // Machinery
 procedure {:inline 1} $create_machine(m: Machine, p: Payload) returns (r: int);
@@ -76,15 +75,15 @@ implementation {:inline 1} $send(mid: int, e: Event, p: Payload)
 {
   $bb0:
     $Payload[mid] := p;
-    call $enqueue(mid, e);
+    call $q_enqueue(mid, e);
     async call $run_event_handler(mid);
     return;
 }
 
-procedure {:inline 1} $enqueue(mid: int, e: Event);
+procedure {:inline 1} $q_enqueue(mid: int, e: Event);
   modifies $Inbox, $InboxSize;
 
-implementation {:inline 1} $enqueue(mid: int, e: Event)
+implementation {:inline 1} $q_enqueue(mid: int, e: Event)
 {
   var index: int;
 
@@ -92,6 +91,27 @@ implementation {:inline 1} $enqueue(mid: int, e: Event)
     index := $InboxSize[mid];
     $Inbox[mid][index] := e;
     $InboxSize[mid] := $InboxSize[mid] + 1;
+    return;
+}
+
+procedure {:inline 1} $q_remove(mid: int, idx: int);
+  modifies $Inbox, $InboxSize;
+
+implementation {:inline 1} $q_remove(mid: int, idx: int)
+{
+  var index: int;
+
+  $bb0:
+    index := idx;
+
+    while (index < $InboxSize[mid] - 1)
+    {
+      $Inbox[mid][index] := $Inbox[mid][index + 1];
+      index := index + 1;
+    }
+
+    $InboxSize[mid] := $InboxSize[mid] - 1;
+
     return;
 }
 
@@ -103,8 +123,8 @@ implementation {:inline 1} $run_event_handler(mid: int)
   var nextEvent: Event;
 
   $bb0:
-    // yield;
-    nextEvent := $NULL;
+    yield;
+    nextEvent := $DEFAULT;
 
     if ($IsHalted[mid])
     {
@@ -115,7 +135,7 @@ implementation {:inline 1} $run_event_handler(mid: int)
     // {
     //   call nextEvent := $get_next_event(mid);
     //
-    //   if (nextEvent == $NULL)
+    //   if (nextEvent == $DEFAULT)
     //   {
     //     break;
     //   }
@@ -125,7 +145,7 @@ implementation {:inline 1} $run_event_handler(mid: int)
 
     call nextEvent := $get_next_event(mid);
 
-    if (nextEvent == $NULL)
+    if (nextEvent == $DEFAULT)
     {
       return;
     }
@@ -146,40 +166,31 @@ implementation {:inline 1} $get_next_event(mid: int) returns (r: Event)
   var size: int;
 
   $bb0:
-    nextEvent := $NULL;
+    nextEvent := $DEFAULT;
 
-    if ($Raised[mid] != $NULL)
+    if ($Raised[mid] != $DEFAULT)
     {
       nextEvent := $Raised[mid];
-      $Raised[mid] := $NULL;
+      $Raised[mid] := $DEFAULT;
     }
     else if ($InboxSize[mid] > 0)
     {
       index := 0;
       while (index < $InboxSize[mid])
       {
-        nextEvent := $Inbox[mid][index];
-        break;
-        index := index + 1;
-      }
-
-      if (nextEvent != $NULL)
-      {
-        index := 0;
-        size := 0;
-        while (index < $InboxSize[mid])
+        if ($Ignores[mid][$Inbox[mid][index]])
         {
-          if ($Inbox[mid][index] != nextEvent)
-          {
-            inbox[size] := $Inbox[mid][index];
-            size := size + 1;
-          }
-
-          index := index + 1;
+          call $q_remove(mid, index);
+          index := index - 1;
+        }
+        else if (!$Defers[mid][$Inbox[mid][index]])
+        {
+          nextEvent := $Inbox[mid][index];
+          call $q_remove(mid, index);
+          break;
         }
 
-        $Inbox[mid] := inbox;
-        $InboxSize[mid] := $InboxSize[mid] - 1;
+        index := index + 1;
       }
     }
 
@@ -234,7 +245,7 @@ implementation {:inline 1} _machine.server.constructor(mid: int)
     $IsHalted[mid] := false;
     $InboxSize[mid] := 0;
     $State[mid] := _machine.server.init;
-    $Raised[mid] := $NULL;
+    $Raised[mid] := $DEFAULT;
     $Heap[mid][_machine.server.client] := $NULL;
     async call _machine.server.start(mid);
     return;
@@ -246,7 +257,7 @@ procedure {:inline 1} _machine.server.start(mid: int);
 implementation {:inline 1} _machine.server.start(mid: int)
 {
   $bb0:
-    // yield;
+    yield;
     call _machine.server.init.entry(mid);
     return;
 }
@@ -263,12 +274,20 @@ implementation {:inline 1} _machine.server.handle_event(mid: int, e: Event)
       {
         call _machine.server.goto_state(mid, _machine.server.playing);
       }
+      else
+      {
+        // assert false;
+      }
     }
     else if ($State[mid] == _machine.server.playing)
     {
       if (e == _event.ping)
       {
         call _machine.server.sendPong(mid);
+      }
+      else
+      {
+        assert false;
       }
     }
 
@@ -342,7 +361,7 @@ implementation {:inline 1} _machine.client.constructor(mid: int)
     $IsHalted[mid] := false;
     $InboxSize[mid] := 0;
     $State[mid] := _machine.client.init;
-    $Raised[mid] := $NULL;
+    $Raised[mid] := $DEFAULT;
     $Heap[mid][_machine.client.server] := $NULL;
     $Heap[mid][_machine.client.counter] := 0;
     async call _machine.client.start(mid);
@@ -355,7 +374,7 @@ procedure {:inline 1} _machine.client.start(mid: int);
 implementation {:inline 1} _machine.client.start(mid: int)
 {
   $bb0:
-    // yield;
+    yield;
     call _machine.client.init.entry(mid);
     return;
 }
@@ -421,11 +440,11 @@ procedure {:inline 1} {:entry} _machine.client.playing.entry(mid: int);
 implementation {:inline 1} {:entry} _machine.client.playing.entry(mid: int)
 {
   $bb0:
-    if ($Heap[mid][_machine.client.counter] == 1)
-    {
-      // call $raise(mid, $HALT, $NULL);
-      assert false;
-    }
+    // if ($Heap[mid][_machine.client.counter] == 1)
+    // {
+    //   call $raise(mid, $HALT, $NULL);
+    //   // assert false;
+    // }
 
     return;
 }
@@ -436,7 +455,12 @@ procedure {:inline 1} _machine.client.sendPing(mid: int);
 implementation {:inline 1} _machine.client.sendPing(mid: int)
 {
   $bb0:
-    assert false;
+    if ($Heap[mid][_machine.client.counter] == 1)
+    {
+      call $raise(mid, $HALT, $NULL); return;
+      // assert false;
+    }
+
     $Heap[mid][_machine.client.counter] := $Heap[mid][_machine.client.counter] + 1;
     call $send($Heap[mid][_machine.client.server], _event.ping, $NULL);
     call $raise(mid, _event.unit, $NULL);

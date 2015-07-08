@@ -18,11 +18,11 @@ var $Defers: [int][Event]bool;
 // Types
 type Machine;
 type State;
-type Event = int;
+type Event;
 type Payload = int;
 
-const unique $HALT: Event;
 const unique $DEFAULT: Event;
+const unique $HALT: Event;
 
 const unique $NULL: int;
 axiom $NULL == 0;
@@ -45,7 +45,7 @@ function $q_enqueue(Event, Queue) returns (Queue);
 axiom $q_length($queue()) == 0;
 axiom (forall e:Event, q:Queue :: $q_length($q_cons(e, q)) == 1 + $q_length(q));
 
-axiom (forall e:Event, q:Queue :: $q_first($queue()) == $NULL);
+axiom (forall e:Event, q:Queue :: $q_first($queue()) == $DEFAULT);
 axiom (forall e:Event, q:Queue :: $q_first($q_cons(e, q)) == e);
 
 axiom (forall e:Event, q:Queue :: $q_tail($queue()) == $queue());
@@ -124,7 +124,7 @@ implementation {:inline 1} $run_event_handler(mid: int)
 
   $bb0:
     // yield;
-    nextEvent := $NULL;
+    nextEvent := $DEFAULT;
 
     if ($IsHalted[mid])
     {
@@ -135,7 +135,7 @@ implementation {:inline 1} $run_event_handler(mid: int)
     // {
     //   call nextEvent := $get_next_event(mid);
     //
-    //   if (nextEvent == $NULL)
+    //   if (nextEvent == $DEFAULT)
     //   {
     //     break;
     //   }
@@ -145,7 +145,7 @@ implementation {:inline 1} $run_event_handler(mid: int)
 
     call nextEvent := $get_next_event(mid);
 
-    if (nextEvent == $NULL)
+    if (nextEvent == $DEFAULT)
     {
       return;
     }
@@ -165,12 +165,12 @@ implementation {:inline 1} $get_next_event(mid: int) returns (r: Event)
   var size: int;
 
   $bb0:
-    nextEvent := $NULL;
+    nextEvent := $DEFAULT;
 
-    if ($Raised[mid] != $NULL)
+    if ($Raised[mid] != $DEFAULT)
     {
       nextEvent := $Raised[mid];
-      $Raised[mid] := $NULL;
+      $Raised[mid] := $DEFAULT;
     }
     else if ($q_length($Inbox[mid]) > 0)
     {
@@ -244,7 +244,7 @@ implementation {:inline 1} _machine.server.constructor(mid: int)
     $IsHalted[mid] := false;
     $Inbox[mid] := $queue();
     $State[mid] := _machine.server.init;
-    $Raised[mid] := $NULL;
+    $Raised[mid] := $DEFAULT;
     $Heap[mid][_machine.server.client] := $NULL;
     async call _machine.server.start(mid);
     return;
@@ -352,7 +352,7 @@ implementation {:inline 1} _machine.client.constructor(mid: int)
     $IsHalted[mid] := false;
     $Inbox[mid] := $queue();
     $State[mid] := _machine.client.init;
-    $Raised[mid] := $NULL;
+    $Raised[mid] := $DEFAULT;
     $Heap[mid][_machine.client.server] := $NULL;
     $Heap[mid][_machine.client.counter] := 0;
     async call _machine.client.start(mid);
@@ -434,7 +434,7 @@ implementation {:inline 1} {:entry} _machine.client.playing.entry(mid: int)
     if ($Heap[mid][_machine.client.counter] == 1)
     {
       // call $raise(mid, $HALT, $NULL);return;
-      // assert false;
+      assert false;
     }
 
     return;
@@ -446,11 +446,10 @@ procedure {:inline 1} _machine.client.sendPing(mid: int);
 implementation {:inline 1} _machine.client.sendPing(mid: int)
 {
   $bb0:
-    assert false;
+    // assert false;
     $Heap[mid][_machine.client.counter] := $Heap[mid][_machine.client.counter] + 1;
     call $send($Heap[mid][_machine.client.server], _event.ping, $NULL);
-    // call $raise(mid, _event.unit, $NULL);
-    // call $raise(mid, $HALT, $NULL);
+    call $raise(mid, _event.unit, $NULL);
     return;
 }
 
