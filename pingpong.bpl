@@ -76,6 +76,7 @@ implementation {:inline 1} $send(mid: int, e: Event, p: Payload)
   $bb0:
     $Payload[mid] := p;
     call $q_enqueue(mid, e);
+    yield;
     async call $run_event_handler(mid);
     return;
 }
@@ -116,14 +117,13 @@ implementation {:inline 1} $q_remove(mid: int, idx: int)
 }
 
 procedure {:inline 1} $run_event_handler(mid: int);
-  modifies $Heap, $State, $IsHalted, $Raised, $Inbox, $InboxSize;
+  modifies $Heap, $State, $IsHalted, $Raised, $Inbox, $InboxSize, $Payload;
 
 implementation {:inline 1} $run_event_handler(mid: int)
 {
   var nextEvent: Event;
 
   $bb0:
-    yield;
     nextEvent := $DEFAULT;
 
     if ($IsHalted[mid])
@@ -145,10 +145,10 @@ implementation {:inline 1} $run_event_handler(mid: int)
 
     call nextEvent := $get_next_event(mid);
 
-    if (nextEvent == $DEFAULT)
-    {
-      return;
-    }
+    // if (nextEvent == $DEFAULT)
+    // {
+    //   return;
+    // }
 
     call $handle_event(mid, nextEvent);
 
@@ -199,7 +199,7 @@ implementation {:inline 1} $get_next_event(mid: int) returns (r: Event)
 }
 
 procedure {:inline 1} $handle_event(mid: int, e: Event);
-  modifies $Heap, $State, $IsHalted, $Raised, $Inbox, $InboxSize;
+  modifies $Heap, $State, $IsHalted, $Raised, $Inbox, $InboxSize, $Payload;
 
 implementation {:inline 1} $handle_event(mid: int, e: Event)
 {
@@ -247,17 +247,21 @@ implementation {:inline 1} _machine.server.constructor(mid: int)
     $State[mid] := _machine.server.init;
     $Raised[mid] := $DEFAULT;
     $Heap[mid][_machine.server.client] := $NULL;
+
+    assume (forall e:Event :: $Ignores[mid][e] == false);
+    assume (forall e:Event :: $Defers[mid][e] == false);
+
+    yield;
     async call _machine.server.start(mid);
     return;
 }
 
 procedure {:inline 1} _machine.server.start(mid: int);
-  modifies $CurrMid, $MType, $Heap, $State, $IsHalted, $Raised, $Inbox, $Payload;
+  modifies $CurrMid, $MType, $Heap, $State, $IsHalted, $Raised, $Inbox, $InboxSize, $Payload;
 
 implementation {:inline 1} _machine.server.start(mid: int)
 {
   $bb0:
-    yield;
     call _machine.server.init.entry(mid);
     return;
 }
@@ -276,7 +280,7 @@ implementation {:inline 1} _machine.server.handle_event(mid: int, e: Event)
       }
       else
       {
-        // assert false;
+        assert false;
       }
     }
     else if ($State[mid] == _machine.server.playing)
@@ -364,17 +368,21 @@ implementation {:inline 1} _machine.client.constructor(mid: int)
     $Raised[mid] := $DEFAULT;
     $Heap[mid][_machine.client.server] := $NULL;
     $Heap[mid][_machine.client.counter] := 0;
+
+    assume (forall e:Event :: $Ignores[mid][e] == false);
+    assume (forall e:Event :: $Defers[mid][e] == false);
+
+    yield;
     async call _machine.client.start(mid);
     return;
 }
 
 procedure {:inline 1} _machine.client.start(mid: int);
-  modifies $CurrMid, $MType, $Heap, $State, $IsHalted, $Raised, $Inbox, $Payload;
+  modifies $CurrMid, $MType, $Heap, $State, $IsHalted, $Raised, $Inbox, $InboxSize, $Payload;
 
 implementation {:inline 1} _machine.client.start(mid: int)
 {
   $bb0:
-    yield;
     call _machine.client.init.entry(mid);
     return;
 }
@@ -391,6 +399,10 @@ implementation {:inline 1} _machine.client.handle_event(mid: int, e: Event)
       {
         call _machine.client.goto_state(mid, _machine.client.playing);
       }
+      else
+      {
+        assert false;
+      }
     }
     else if ($State[mid] == _machine.client.playing)
     {
@@ -402,13 +414,17 @@ implementation {:inline 1} _machine.client.handle_event(mid: int, e: Event)
       {
         call _machine.client.sendPing(mid);
       }
+      else
+      {
+        assert false;
+      }
     }
 
     return;
 }
 
 procedure {:inline 1} _machine.client.goto_state(mid: int, s: State);
-  modifies $State, $Inbox, $InboxSize, $Payload;
+  modifies $Heap, $State, $IsHalted, $Raised, $Inbox, $InboxSize, $Payload;
 
 implementation {:inline 1} _machine.client.goto_state(mid: int, s: State)
 {
@@ -436,15 +452,15 @@ implementation {:inline 1} {:entry} _machine.client.init.entry(mid: int)
 }
 
 procedure {:inline 1} {:entry} _machine.client.playing.entry(mid: int);
+  modifies $Heap, $State, $IsHalted, $Raised, $Inbox, $InboxSize, $Payload;
 
 implementation {:inline 1} {:entry} _machine.client.playing.entry(mid: int)
 {
   $bb0:
-    // if ($Heap[mid][_machine.client.counter] == 1)
-    // {
-    //   call $raise(mid, $HALT, $NULL);
-    //   // assert false;
-    // }
+    if ($Heap[mid][_machine.client.counter] == 1)
+    {
+      call $raise(mid, $HALT, $NULL);
+    }
 
     return;
 }
@@ -455,12 +471,6 @@ procedure {:inline 1} _machine.client.sendPing(mid: int);
 implementation {:inline 1} _machine.client.sendPing(mid: int)
 {
   $bb0:
-    if ($Heap[mid][_machine.client.counter] == 1)
-    {
-      call $raise(mid, $HALT, $NULL); return;
-      // assert false;
-    }
-
     $Heap[mid][_machine.client.counter] := $Heap[mid][_machine.client.counter] + 1;
     call $send($Heap[mid][_machine.client.server], _event.ping, $NULL);
     call $raise(mid, _event.unit, $NULL);
