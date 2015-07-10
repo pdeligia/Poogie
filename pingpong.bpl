@@ -218,7 +218,8 @@ implementation {:inline 1} _machine.server.handle_event(mid: int, e: Event)
     {
       if (e == _event.unit)
       {
-        call _machine.server.goto_state(mid, _machine.server.playing);
+        $State[mid] := _machine.server.playing;
+        call _machine.server.playing.entry(mid);
       }
       else
       {
@@ -235,21 +236,6 @@ implementation {:inline 1} _machine.server.handle_event(mid: int, e: Event)
       {
         assert false;
       }
-    }
-
-    return;
-}
-
-procedure {:inline 1} _machine.server.goto_state(mid: int, s: State);
-  modifies $State, $Inbox, $InboxSize, $Payload;
-
-implementation {:inline 1} _machine.server.goto_state(mid: int, s: State)
-{
-  $bb0:
-    $State[mid] := s;
-    if (s == _machine.server.playing)
-    {
-      call _machine.server.playing.entry(mid);
     }
 
     return;
@@ -327,7 +313,8 @@ implementation {:inline 1} _machine.client.handle_event(mid: int, e: Event)
     {
       if (e == _event.unit)
       {
-        call _machine.client.goto_state(mid, _machine.client.playing);
+        $State[mid] := _machine.client.playing;
+        call _machine.client.playing.entry(mid);
       }
       else
       {
@@ -338,7 +325,7 @@ implementation {:inline 1} _machine.client.handle_event(mid: int, e: Event)
     {
       if (e == _event.unit)
       {
-        call _machine.client.goto_state(mid, _machine.client.playing);
+        call _machine.client.playing.entry(mid);
       }
       else if (e == _event.pong)
       {
@@ -348,21 +335,6 @@ implementation {:inline 1} _machine.client.handle_event(mid: int, e: Event)
       {
         assert false;
       }
-    }
-
-    return;
-}
-
-procedure {:inline 1} _machine.client.goto_state(mid: int, s: State);
-  modifies $Heap, $State, $IsHalted, $Inbox, $InboxSize, $Payload;
-
-implementation {:inline 1} _machine.client.goto_state(mid: int, s: State)
-{
-  $bb0:
-    $State[mid] := s;
-    if (s == _machine.client.playing)
-    {
-      call _machine.client.playing.entry(mid);
     }
 
     return;
