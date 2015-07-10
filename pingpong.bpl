@@ -6,13 +6,13 @@ var $State: [int]State;
 var $IsHalted: [int]bool;
 
 var $Inbox: [int][int]Event;
-var $InboxSize: [int] int;
+var $InboxSize: [int]int;
 
 var $Payload: [int]Payload;
 
 var $Ignores: [int][Event]bool;
 var $Defers: [int][Event]bool;
-
+//{:thread_local}
 
 // Types
 type Machine;
@@ -65,7 +65,7 @@ implementation {:inline 1} $raise(mid: int, mtype: Machine, e: Event, p: Payload
 procedure {:inline 1} $send(mid: int, mtype: Machine, e: Event, p: Payload);
   modifies $Inbox, $InboxSize, $Payload;
 
-implementation {:inline 1} $send(mid: int, mtype: Machine e: Event, p: Payload)
+implementation {:inline 1} $send(mid: int, mtype: Machine, e: Event, p: Payload)
 {
   $bb0:
     $Payload[mid] := p;
@@ -116,7 +116,6 @@ procedure {:inline 1} $run_event_handler(mid: int, mtype: Machine);
 implementation {:inline 1} $run_event_handler(mid: int, mtype: Machine)
 {
   var nextEvent: Event;
-  // var x:int;
 
   $bb0:
     if ($IsHalted[mid])
@@ -124,32 +123,17 @@ implementation {:inline 1} $run_event_handler(mid: int, mtype: Machine)
       return;
     }
 
-    // x := 0;
     nextEvent := $DEFAULT;
     while ($InboxSize[mid] > 0 && !$IsHalted[mid])
     {
       call nextEvent := $get_next_event(mid);
       if (nextEvent == $DEFAULT)
-      // if (x == 1)
       {
-        // assert false;
         break;
       }
 
       call $handle_event(mid, mtype, nextEvent);
-      // x := x + 1;
     }
-
-    // yield;
-
-    // call nextEvent := $get_next_event(mid);
-
-    // if (nextEvent == $DEFAULT)
-    // {
-    //   return;
-    // }
-
-    // call $handle_event(mid, nextEvent);
 
     return;
 }

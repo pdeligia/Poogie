@@ -1,59 +1,12 @@
-class Global
+class Event
 {
-  var machines: set<int>
-
-  static method Foo()
-  {
-    machines := machines + { 1 };
-  }
+  var name: string;
+  var payload: object;
 }
 
-class Program
+trait Machine
 {
-  //var p_machine: Machine;
-  var test: bool;
-
-  constructor()
-    modifies this
-  {
-  //  p_machine := new Machine;
-    test := false;
-  //  this.Init_p_entry();
-  }
-
-  method Init_p_entry()
-  //  requires this.p_machine != null
-  //  modifies this.p_machine
-  {
-    print "entry\n";
-  //  var e := new Event;
-  //  e.name := "E1";
-  //  p_machine.p_send(p_machine, e);
-  }
-
-  //method Action1()
-  //  modifies this
-  //{
-  //  test := true;
-  //}
-
-  //method Action2()
-  //{
-  //  assert test == false;
-  //}
-}
-
-class Machine<T>
-{
-  var p_machine: T;
   var p_inbox: seq<Event>;
-
-  constructor(m: T)
-    modifies this
-  {
-    p_machine := m;
-    p_machine.Init_p_entry();
-  }
 
   method p_send(m: Machine, e: Event)
     requires m != null
@@ -81,14 +34,57 @@ class Machine<T>
   }
 }
 
-class Event
+class Server extends Machine
 {
-  var name: string;
-  var payload: object;
+  var client: Machine;
+
+  constructor()
+    modifies this
+  {
+    this.client := null;
+    this.Init_p_entry();
+  }
+
+  method Init_p_entry()
+    modifies this
+  {
+    print "server entry\n";
+    this.client := new Client();
+  //  var e := new Event;
+  //  e.name := "E1";
+  //  p_machine.p_send(p_machine, e);
+  }
+
+  //method Action1()
+  //  modifies this
+  //{
+  //  test := true;
+  //}
+
+  //method Action2()
+  //{
+  //  assert test == false;
+  //}
+}
+
+class Client extends Machine
+{
+  var server: Machine;
+
+  constructor()
+    modifies this
+  {
+    server := null;
+    this.Init_p_entry();
+  }
+
+  method Init_p_entry()
+  {
+    print "client entry\n";
+  }
 }
 
 method Main()
 {
-  var program := new Program();
-  var m := new Machine<Program>(program);
+  var m := new Server();
 }
