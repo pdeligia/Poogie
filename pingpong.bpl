@@ -11,6 +11,7 @@ var {:thread_local} $Raised: [int]Event;
 var {:thread_local} $Ignores: [int][Event]bool;
 var {:thread_local} $Defers: [int][Event]bool;
 
+
 // Types
 type Machine;
 type State;
@@ -22,6 +23,7 @@ const unique $HALT: Event;
 
 const unique $NULL: int;
 axiom $NULL == 0;
+
 
 // Machinery
 procedure {:inline 1} $create_machine(m: Machine, p: Payload) returns (r: int);
