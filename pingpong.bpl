@@ -50,10 +50,10 @@ implementation {:inline 1} $create_machine(m: Machine, p: Payload) returns (mid:
     return;
 }
 
-procedure {:inline 1} $raise(mid: int, mtype: Machine, e: Event, p: Payload);
+procedure {:inline 1} $raise(mid: int, e: Event, p: Payload);
   modifies $Heap, $State, $IsHalted, $Inbox, $InboxSize, $Payload;
 
-implementation {:inline 1} $raise(mid: int, mtype: Machine, e: Event, p: Payload)
+implementation {:inline 1} $raise(mid: int, e: Event, p: Payload)
 {
   $bb0:
     $Payload[mid] := p;
@@ -251,7 +251,7 @@ implementation {:inline 1} {:entry} _machine.server.init.entry(mid: int)
   $bb0:
     call client := $create_machine(_machine.client, mid);
     $Heap[mid][_machine.server.client] := client;
-    call $raise(mid, _machine.server, _event.unit, $NULL);
+    call $raise(mid, _event.unit, $NULL);
     return;
 }
 
@@ -349,7 +349,7 @@ implementation {:inline 1} {:entry} _machine.client.init.entry(mid: int)
 
   $bb0:
     $Heap[mid][_machine.client.server] := $Payload[mid];
-    call $raise(mid, _machine.client, _event.unit, $NULL);
+    call $raise(mid, _event.unit, $NULL);
     return;
 }
 
@@ -362,7 +362,7 @@ implementation {:inline 1} {:entry} _machine.client.playing.entry(mid: int)
     if ($Heap[mid][_machine.client.counter] == 1)
     {
       assert false;
-      call $raise(mid, _machine.client, $HALT, $NULL);
+      call $raise(mid, $HALT, $NULL);
     }
 
     return;
@@ -376,7 +376,7 @@ implementation {:inline 1} _machine.client.sendPing(mid: int)
   $bb0:
     $Heap[mid][_machine.client.counter] := $Heap[mid][_machine.client.counter] + 1;
     call $send($Heap[mid][_machine.client.server], _event.ping, $NULL);
-    call $raise(mid, _machine.client, _event.unit, $NULL);
+    call $raise(mid, _event.unit, $NULL);
     return;
 }
 
