@@ -111,7 +111,7 @@ implementation {:inline 1} $run_event_handler(mid: int, mtype: Machine)
       call nextEvent := $get_next_event(mid);
       if (nextEvent == $DEFAULT)
       {
-        break;
+        assume false;
       }
       else if (nextEvent == $HALT)
       {

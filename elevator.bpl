@@ -115,7 +115,7 @@ implementation {:inline 1} $run_event_handler(mid: int, mtype: Machine)
       call nextEvent := $get_next_event(mid);
       if (nextEvent == $DEFAULT)
       {
-        break;
+        assume false;
       }
       else if (nextEvent == $HALT)
       {
@@ -353,6 +353,8 @@ implementation {:inline 1} _machine.elevator.handle_event(mid: int, e: Event)
     }
     else if ($State[mid] == _machine.elevator.doorClosed)
     {
+      $Ignores[mid][_event.eCloseDoor] := false;
+
       if (e == _event.eOpenDoor)
       {
         $State[mid] := _machine.elevator.doorOpening;
@@ -367,9 +369,154 @@ implementation {:inline 1} _machine.elevator.handle_event(mid: int, e: Event)
     }
     else if ($State[mid] == _machine.elevator.doorOpening)
     {
+      $Ignores[mid][_event.eOpenDoor] := false;
+      $Defers[mid][_event.eCloseDoor] := false;
+
+      if (e == _event.eDoorOpened)
+      {
+        $State[mid] := _machine.elevator.doorOpened;
+        $Defers[mid][_event.eCloseDoor] := true;
+        call _machine.elevator.doorOpened.entry(mid);
+      }
+      else
+      {
+        assert false;
+      }
+    }
+    else if ($State[mid] == _machine.elevator.doorOpened)
+    {
+      $Defers[mid][_event.eCloseDoor] := false;
+
+      if (e == _event.eTimerFired)
+      {
+        $State[mid] := _machine.elevator.doorOpenedOkToClose;
+        $Defers[mid][_event.eOpenDoor] := true;
+        call _machine.elevator.doorOpenedOkToClose.entry(mid);
+      }
+      else if (e == _event.eStopTimerReturned)
+      {
+        $State[mid] := _machine.elevator.doorOpened;
+        $Defers[mid][_event.eCloseDoor] := true;
+        call _machine.elevator.doorOpened.entry(mid);
+      }
+      else if (e == _event.eOpenDoor)
+      {
+        assert false;
+      }
+      else
+      {
+        assert false;
+      }
+    }
+    else if ($State[mid] == _machine.elevator.doorOpenedOkToClose)
+    {
+      $Defers[mid][_event.eOpenDoor] := false;
+
+      if (e == _event.eStopTimerReturned)
+      {
+        $State[mid] := _machine.elevator.doorClosing;
+        $Defers[mid][_event.eCloseDoor] := true;
+        call _machine.elevator.doorClosing.entry(mid);
+      }
+      else if (e == _event.eTimerFired)
+      {
+        $State[mid] := _machine.elevator.doorClosing;
+        $Defers[mid][_event.eCloseDoor] := true;
+        call _machine.elevator.doorClosing.entry(mid);
+      }
+      else if (e == _event.eCloseDoor)
+      {
+        assert false;
+      }
+      else
+      {
+        assert false;
+      }
+    }
+    else if ($State[mid] == _machine.elevator.doorClosing)
+    {
+      $Defers[mid][_event.eCloseDoor] := false;
+
       if (e == _event.eOpenDoor)
       {
-        // call _machine.elevator.doorOpening.entry(mid);
+        $State[mid] := _machine.elevator.stoppingDoor;
+        $Defers[mid][_event.eCloseDoor] := true;
+        call _machine.elevator.stoppingDoor.entry(mid);
+      }
+      else if (e == _event.eDoorClosed)
+      {
+        $State[mid] := _machine.elevator.doorClosed;
+        call _machine.elevator.doorClosed.entry(mid);
+      }
+      else if (e == _event.eObjectDetected)
+      {
+        $State[mid] := _machine.elevator.doorOpening;
+        call _machine.elevator.doorOpening.entry(mid);
+      }
+      else
+      {
+        assert false;
+      }
+    }
+    else if ($State[mid] == _machine.elevator.stoppingDoor)
+    {
+      $Defers[mid][_event.eCloseDoor] := false;
+
+      if (e == _event.eDoorOpened)
+      {
+        $State[mid] := _machine.elevator.doorOpened;
+        $Defers[mid][_event.eCloseDoor] := true;
+        call _machine.elevator.doorOpened.entry(mid);
+      }
+      else if (e == _event.eDoorClosed)
+      {
+        $State[mid] := _machine.elevator.doorClosed;
+        call _machine.elevator.doorClosed.entry(mid);
+      }
+      else if (e == _event.eDoorStopped)
+      {
+        $State[mid] := _machine.elevator.doorOpening;
+        call _machine.elevator.doorOpening.entry(mid);
+      }
+      else
+      {
+        assert false;
+      }
+    }
+    else if ($State[mid] == _machine.elevator.stoppingTimer)
+    {
+      $Defers[mid][_event.eOpenDoor] := false;
+      $Defers[mid][_event.eCloseDoor] := false;
+      $Defers[mid][_event.eObjectDetected] := false;
+
+      if (e == _event.eOperationSuccess)
+      {
+        $State[mid] := _machine.elevator.returnState;
+        call _machine.elevator.returnState.entry(mid);
+      }
+      else if (e == _event.eOperationFailure)
+      {
+        $State[mid] := _machine.elevator.waitingForTimer;
+        $Defers[mid][_event.eOpenDoor] := true;
+        $Defers[mid][_event.eCloseDoor] := true;
+        $Defers[mid][_event.eObjectDetected] := true;
+        call _machine.elevator.waitingForTimer.entry(mid);
+      }
+      else
+      {
+        assert false;
+      }
+    }
+    else if ($State[mid] == _machine.elevator.waitingForTimer)
+    {
+      $Defers[mid][_event.eOpenDoor] := false;
+      $Defers[mid][_event.eCloseDoor] := false;
+      $Defers[mid][_event.eObjectDetected] := false;
+
+      if (e == _event.eTimerFired)
+      {
+        $State[mid] := _machine.elevator.returnState;
+        call _machine.elevator.returnState.entry(mid);
       }
       else
       {
@@ -386,10 +533,13 @@ procedure {:inline 1} {:entry} _machine.elevator.init.entry(mid: int);
 implementation {:inline 1} {:entry} _machine.elevator.init.entry(mid: int)
 {
   var door: int;
+  // var timer: int;
 
   $bb0:
     call door := $create_machine(_machine.door, mid);
     $Heap[mid][_machine.elevator.door] := door;
+    // call timer := $create_machine(_machine.timer, mid);
+    // $Heap[mid][_machine.elevator.timer] := timer;
     call $raise(mid, _event.eUnit, $NULL);
     return;
 }
@@ -411,6 +561,76 @@ implementation {:inline 1} {:entry} _machine.elevator.doorOpening.entry(mid: int
 {
   $bb0:
     call $send($Heap[mid][_machine.elevator.door], _event.eSendCommandToOpenDoor, $NULL);
+    return;
+}
+
+procedure {:inline 1} {:entry} _machine.elevator.doorOpened.entry(mid: int);
+  modifies $Inbox, $InboxSize, $Payload;
+
+implementation {:inline 1} {:entry} _machine.elevator.doorOpened.entry(mid: int)
+{
+  $bb0:
+    call $send($Heap[mid][_machine.elevator.door], _event.eSendCommandToResetDoor, $NULL);
+    // call $send($Heap[mid][_machine.elevator.timer], _event.eStartDoorCloseTimer, $NULL);
+    return;
+}
+
+procedure {:inline 1} {:entry} _machine.elevator.doorOpenedOkToClose.entry(mid: int);
+  modifies $Inbox, $InboxSize, $Payload;
+
+implementation {:inline 1} {:entry} _machine.elevator.doorOpenedOkToClose.entry(mid: int)
+{
+  $bb0:
+    // call $send($Heap[mid][_machine.elevator.timer], _event.eStartDoorCloseTimer, $NULL);
+    return;
+}
+
+procedure {:inline 1} {:entry} _machine.elevator.doorClosing.entry(mid: int);
+  modifies $Inbox, $InboxSize, $Payload;
+
+implementation {:inline 1} {:entry} _machine.elevator.doorClosing.entry(mid: int)
+{
+  $bb0:
+    call $send($Heap[mid][_machine.elevator.door], _event.eSendCommandToCloseDoor, $NULL);
+    return;
+}
+
+procedure {:inline 1} {:entry} _machine.elevator.stoppingDoor.entry(mid: int);
+  modifies $Inbox, $InboxSize, $Payload;
+
+implementation {:inline 1} {:entry} _machine.elevator.stoppingDoor.entry(mid: int)
+{
+  $bb0:
+    call $send($Heap[mid][_machine.elevator.door], _event.eSendCommandToStopDoor, $NULL);
+    return;
+}
+
+procedure {:inline 1} {:entry} _machine.elevator.stoppingTimer.entry(mid: int);
+  modifies $Inbox, $InboxSize, $Payload;
+
+implementation {:inline 1} {:entry} _machine.elevator.stoppingTimer.entry(mid: int)
+{
+  $bb0:
+    // call $send($Heap[mid][_machine.elevator.timer], _event.eStopDoorCloseTimer, $NULL);
+    return;
+}
+
+procedure {:inline 1} {:entry} _machine.elevator.waitingForTimer.entry(mid: int);
+  modifies $Inbox, $InboxSize, $Payload;
+
+implementation {:inline 1} {:entry} _machine.elevator.waitingForTimer.entry(mid: int)
+{
+  $bb0:
+    return;
+}
+
+procedure {:inline 1} {:entry} _machine.elevator.returnState.entry(mid: int);
+  modifies $Inbox, $InboxSize, $Payload;
+
+implementation {:inline 1} {:entry} _machine.elevator.returnState.entry(mid: int)
+{
+  $bb0:
+    call $raise(mid, _event.eStopTimerReturned, $NULL);
     return;
 }
 
@@ -469,6 +689,10 @@ implementation {:inline 1} _machine.door.handle_event(mid: int, e: Event)
     }
     else if ($State[mid] == _machine.door.init)
     {
+      $Ignores[mid][_event.eSendCommandToStopDoor] := false;
+      $Ignores[mid][_event.eSendCommandToResetDoor] := false;
+      $Ignores[mid][_event.eResetDoor] := false;
+
       if (e == _event.eSendCommandToOpenDoor)
       {
         $State[mid] := _machine.door.openDoor;
@@ -476,7 +700,106 @@ implementation {:inline 1} _machine.door.handle_event(mid: int, e: Event)
       }
       else if (e == _event.eSendCommandToCloseDoor)
       {
-        // call _machine.door.loop.entry(mid);
+        $State[mid] := _machine.door.considerClosingDoor;
+        call _machine.door.considerClosingDoor.entry(mid);
+      }
+      else
+      {
+        assert false;
+      }
+    }
+    else if ($State[mid] == _machine.door.openDoor)
+    {
+      if (e == _event.eUnit)
+      {
+        $State[mid] := _machine.door.resetDoor;
+        $Ignores[mid][_event.eSendCommandToOpenDoor] := true;
+        $Ignores[mid][_event.eSendCommandToCloseDoor] := true;
+        $Ignores[mid][_event.eSendCommandToStopDoor] := true;
+        call _machine.door.resetDoor.entry(mid);
+      }
+      else
+      {
+        assert false;
+      }
+    }
+    else if ($State[mid] == _machine.door.considerClosingDoor)
+    {
+      if (e == _event.eUnit)
+      {
+        $State[mid] := _machine.door.closeDoor;
+        call _machine.door.closeDoor.entry(mid);
+      }
+      else if (e == _event.eObjectEncountered)
+      {
+        $State[mid] := _machine.door.objectEncountered;
+        call _machine.door.objectEncountered.entry(mid);
+      }
+      else if (e == _event.eSendCommandToStopDoor)
+      {
+        $State[mid] := _machine.door.stopDoor;
+        call _machine.door.stopDoor.entry(mid);
+      }
+      else
+      {
+        assert false;
+      }
+    }
+    else if ($State[mid] == _machine.door.objectEncountered)
+    {
+      if (e == _event.eUnit)
+      {
+        $State[mid] := _machine.door.init;
+        $Ignores[mid][_event.eSendCommandToStopDoor] := true;
+        $Ignores[mid][_event.eSendCommandToResetDoor] := true;
+        $Ignores[mid][_event.eResetDoor] := true;
+        call _machine.door.init.entry(mid);
+      }
+      else
+      {
+        assert false;
+      }
+    }
+    else if ($State[mid] == _machine.door.closeDoor)
+    {
+      if (e == _event.eUnit)
+      {
+        $State[mid] := _machine.door.resetDoor;
+        $Ignores[mid][_event.eSendCommandToOpenDoor] := true;
+        $Ignores[mid][_event.eSendCommandToCloseDoor] := true;
+        $Ignores[mid][_event.eSendCommandToStopDoor] := true;
+        call _machine.door.resetDoor.entry(mid);
+      }
+      else
+      {
+        assert false;
+      }
+    }
+    else if ($State[mid] == _machine.door.stopDoor)
+    {
+      if (e == _event.eUnit)
+      {
+        $State[mid] := _machine.door.openDoor;
+        call _machine.door.openDoor.entry(mid);
+      }
+      else
+      {
+        assert false;
+      }
+    }
+    else if ($State[mid] == _machine.door.resetDoor)
+    {
+      $Ignores[mid][_event.eSendCommandToOpenDoor] := false;
+      $Ignores[mid][_event.eSendCommandToCloseDoor] := false;
+      $Ignores[mid][_event.eSendCommandToStopDoor] := false;
+
+      if (e == _event.eSendCommandToResetDoor)
+      {
+        $State[mid] := _machine.door.init;
+        $Ignores[mid][_event.eSendCommandToStopDoor] := true;
+        $Ignores[mid][_event.eSendCommandToResetDoor] := true;
+        $Ignores[mid][_event.eResetDoor] := true;
+        call _machine.door.init.entry(mid);
       }
       else
       {
@@ -513,7 +836,67 @@ procedure {:inline 1} {:entry} _machine.door.openDoor.entry(mid: int);
 implementation {:inline 1} {:entry} _machine.door.openDoor.entry(mid: int)
 {
   $bb0:
-    assert false;
+    call $send($Heap[mid][_machine.door.elevator], _event.eDoorOpened, $NULL);
+    call $raise(mid, _event.eUnit, $NULL);
+    return;
+}
+
+procedure {:inline 1} {:entry} _machine.door.considerClosingDoor.entry(mid: int);
+  modifies $Inbox, $InboxSize, $Payload;
+
+implementation {:inline 1} {:entry} _machine.door.considerClosingDoor.entry(mid: int)
+{
+  $bb0:
+    if (*)
+    {
+      call $raise(mid, _event.eUnit, $NULL);
+    }
+    else if (*)
+    {
+      call $raise(mid, _event.eObjectEncountered, $NULL);
+    }
+    return;
+}
+
+procedure {:inline 1} {:entry} _machine.door.objectEncountered.entry(mid: int);
+  modifies $Inbox, $InboxSize, $Payload;
+
+implementation {:inline 1} {:entry} _machine.door.objectEncountered.entry(mid: int)
+{
+  $bb0:
+    call $send($Heap[mid][_machine.door.elevator], _event.eObjectDetected, $NULL);
+    call $raise(mid, _event.eUnit, $NULL);
+    return;
+}
+
+procedure {:inline 1} {:entry} _machine.door.closeDoor.entry(mid: int);
+  modifies $Inbox, $InboxSize, $Payload;
+
+implementation {:inline 1} {:entry} _machine.door.closeDoor.entry(mid: int)
+{
+  $bb0:
+    call $send($Heap[mid][_machine.door.elevator], _event.eDoorClosed, $NULL);
+    call $raise(mid, _event.eUnit, $NULL);
+    return;
+}
+
+procedure {:inline 1} {:entry} _machine.door.stopDoor.entry(mid: int);
+  modifies $Inbox, $InboxSize, $Payload;
+
+implementation {:inline 1} {:entry} _machine.door.stopDoor.entry(mid: int)
+{
+  $bb0:
+    call $send($Heap[mid][_machine.door.elevator], _event.eDoorStopped, $NULL);
+    call $raise(mid, _event.eUnit, $NULL);
+    return;
+}
+
+procedure {:inline 1} {:entry} _machine.door.resetDoor.entry(mid: int);
+  modifies $Inbox, $InboxSize, $Payload;
+
+implementation {:inline 1} {:entry} _machine.door.resetDoor.entry(mid: int)
+{
+  $bb0:
     return;
 }
 
